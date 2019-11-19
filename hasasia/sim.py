@@ -11,7 +11,7 @@ day_sec = 24*3600
 yr_sec = 365.25*24*3600
 
 def sim_pta(timespan, cad, sigma, phi, theta, Npsrs=None,
-            A_rn=None, alpha_rn=None, A_gwb=None,alpha_gwb=13/3.,freqs=None):
+            A_rn=None, alpha_rn=None, A_gwb=None,alpha_gwb=-2/3.,freqs=None):
     """
     Make a simulated pulsar timing array. Using the available parameters,
     the function returns a list of pulsar objects encoding them.
