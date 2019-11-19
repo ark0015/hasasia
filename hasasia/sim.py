@@ -11,7 +11,7 @@ day_sec = 24*3600
 yr_sec = 365.25*24*3600
 
 def sim_pta(timespan, cad, sigma, phi, theta, Npsrs=None,
-            A_rn=None, alpha=None, freqs=None):
+            A_rn=None, alpha_rn=None, A_gwb=None,alpha_gwb=13/3.,freqs=None):
     """
     Make a simulated pulsar timing array. Using the available parameters,
     the function returns a list of pulsar objects encoding them.
@@ -41,8 +41,16 @@ def sim_pta(timespan, cad, sigma, phi, theta, Npsrs=None,
     A_rn : float, optional
         Red noise amplitude to be injected for each pulsar.
 
-    alpha : float, optional
+    alpha_rn : float, optional
         Red noise spectral index to be injected for each pulsar.
+
+    A_gwb : float, optional
+        Red noise amplitude of the gravitational wave background 
+        to be injected for each pulsar.
+
+    alpha_rn : float, optional
+        Red noise spectral index of the gravitational wave background
+        to be injected for each pulsar.
 
     freqs : array, optional
         Array of frequencies at which to calculate the red noise. Same
@@ -55,15 +63,25 @@ def sim_pta(timespan, cad, sigma, phi, theta, Npsrs=None,
 
     """
     #Automatically deal with single floats and arrays.
-    if A_rn is None and alpha is None:
+    if A_rn is None and alpha_rn is None and A_gwb is None and alpha_gwb is None:
         pars = [timespan, cad, sigma, phi, theta]
         keys = ['timespan', 'cad', 'sigma', 'phi', 'theta']
         stop = 3
-    else:
-        pars = [timespan, cad, sigma, A_rn, alpha, phi, theta]
-        keys = ['timespan', 'cad', 'sigma', 'A_rn', 'alpha',
+    elif A_rn is None and alpha_rn is None and A_gwb is not None and alpha_gwb is not None:
+        pars = [timespan, cad, sigma, A_gwb, alpha_gwb, phi, theta]
+        keys = ['timespan', 'cad', 'sigma', 'A_gwb', 'alpha_gwb',
                 'phi', 'theta']
         stop = 5
+    elif A_rn is not None and alpha_rn is not None and A_gwb is None and alpha_gwb is None:
+        pars = [timespan, cad, sigma, A_rn, alpha_rn, phi, theta]
+        keys = ['timespan', 'cad', 'sigma', 'A_rn', 'alpha_rn',
+                'phi', 'theta']
+        stop = 5
+    else:
+        pars = [timespan, cad, sigma, A_rn, alpha, A_gwb, alpha_gwb, phi, theta]
+        keys = ['timespan', 'cad', 'sigma', 'A_rn', 'alpha_rn',
+                'A_gwb', 'alpha_gwb','phi', 'theta']
+        stop = 7
 
     haslen = [isinstance(par,(list,np.ndarray)) for par in pars]
     if any(haslen):
@@ -100,7 +118,12 @@ def sim_pta(timespan, cad, sigma, phi, theta, Npsrs=None,
         N = np.diag(toaerrs**2)
         if 'A_rn' in keys:
             plaw = red_noise_powerlaw(A=pars['A_rn'][ii],
-                                      alpha=pars['alpha'][ii],
+                                      alpha=pars['alpha_rn'][ii],
+                                      freqs=freqs)
+            N += corr_from_psd(freqs=freqs, psd=plaw, toas=toas)
+        if 'A_gwb' in keys:
+            plaw = red_noise_powerlaw(A=pars['A_gwb'][ii],
+                                      alpha=pars['alpha_gwb'][ii],
                                       freqs=freqs)
             N += corr_from_psd(freqs=freqs, psd=plaw, toas=toas)
         M = create_design_matrix(toas, RADEC=True, PROPER=True, PX=True)
