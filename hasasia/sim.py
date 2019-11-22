@@ -63,16 +63,16 @@ def sim_pta(timespan, cad, sigma, phi, theta, Npsrs=None,
 
     """
     #Automatically deal with single floats and arrays.
-    if A_rn is None and alpha_rn is None and A_gwb is None and alpha_gwb is None:
+    if A_rn is None and alpha_rn is None and A_gwb is None:
         pars = [timespan, cad, sigma, phi, theta]
         keys = ['timespan', 'cad', 'sigma', 'phi', 'theta']
         stop = 3
-    elif A_rn is None and alpha_rn is None and A_gwb is not None and alpha_gwb is not None:
+    elif A_rn is None and alpha_rn is None and A_gwb is not None:
         pars = [timespan, cad, sigma, A_gwb, alpha_gwb, phi, theta]
         keys = ['timespan', 'cad', 'sigma', 'A_gwb', 'alpha_gwb',
                 'phi', 'theta']
         stop = 5
-    elif A_rn is not None and alpha_rn is not None and A_gwb is None and alpha_gwb is None:
+    elif A_rn is not None and alpha_rn is not None and A_gwb is None:
         pars = [timespan, cad, sigma, A_rn, alpha_rn, phi, theta]
         keys = ['timespan', 'cad', 'sigma', 'A_rn', 'alpha_rn',
                 'phi', 'theta']
