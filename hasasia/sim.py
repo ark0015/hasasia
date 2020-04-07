@@ -11,7 +11,7 @@ day_sec = 24*3600
 yr_sec = 365.25*24*3600
 
 def sim_pta(timespan, cad, sigma, phi, theta, Npsrs=None,
-            A_rn=None, alpha_rn=None, A_gwb=None,alpha_gwb=-2/3.,freqs=None):
+            A_rn=None, alpha=None,freqs=None):
     """
     Make a simulated pulsar timing array. Using the available parameters,
     the function returns a list of pulsar objects encoding them.
@@ -38,19 +38,11 @@ def sim_pta(timespan, cad, sigma, phi, theta, Npsrs=None,
         Number of pulsars. Only needed if all pulsars have the same
         noise characteristics.
 
-    A_rn : float, optional
+    A_rn : float,array,nested list, optional
         Red noise amplitude to be injected for each pulsar.
 
-    alpha_rn : float, optional
+    alpha : float,array,list, optional
         Red noise spectral index to be injected for each pulsar.
-
-    A_gwb : float, optional
-        Red noise amplitude of the gravitational wave background 
-        to be injected for each pulsar.
-
-    alpha_rn : float, optional
-        Red noise spectral index of the gravitational wave background
-        to be injected for each pulsar.
 
     freqs : array, optional
         Array of frequencies at which to calculate the red noise. Same
@@ -63,28 +55,20 @@ def sim_pta(timespan, cad, sigma, phi, theta, Npsrs=None,
 
     """
     #Automatically deal with single floats and arrays.
-    if A_rn is None and alpha_rn is None and A_gwb is None:
+    if A_rn is None and alpha is None:
         pars = [timespan, cad, sigma, phi, theta]
         keys = ['timespan', 'cad', 'sigma', 'phi', 'theta']
         stop = 3
-    elif A_rn is None and alpha_rn is None and A_gwb is not None:
-        pars = [timespan, cad, sigma, A_gwb, alpha_gwb, phi, theta]
-        keys = ['timespan', 'cad', 'sigma', 'A_gwb', 'alpha_gwb',
-                'phi', 'theta']
-        stop = 5
-    elif A_rn is not None and alpha_rn is not None and A_gwb is None:
-        pars = [timespan, cad, sigma, A_rn, alpha_rn, phi, theta]
-        keys = ['timespan', 'cad', 'sigma', 'A_rn', 'alpha_rn',
-                'phi', 'theta']
-        stop = 5
     else:
-        pars = [timespan, cad, sigma, A_rn, alpha, A_gwb, alpha_gwb, phi, theta]
-        keys = ['timespan', 'cad', 'sigma', 'A_rn', 'alpha_rn',
-                'A_gwb', 'alpha_gwb','phi', 'theta']
-        stop = 7
+        pars = [timespan, cad, sigma, A_rn, alpha, phi, theta]
+        keys = ['timespan', 'cad', 'sigma', 'A_rn', 'alpha',
+                'phi', 'theta']
+        stop = 5
 
+    #Do the pars have multiple values
     haslen = [isinstance(par,(list,np.ndarray)) for par in pars]
     if any(haslen):
+        #If they have multiple values, make sure they are all the same length
         L = [len(par) for par, hl in zip(pars, haslen) if hl]
         if not len(set(L))==1:
             err_msg = 'All arrays and lists must be the same length.'
@@ -95,6 +79,9 @@ def sim_pta(timespan, cad, sigma, phi, theta, Npsrs=None,
         err_msg = 'If no array or lists are provided must set Npsrs!!'
         raise ValueError(err_msg)
 
+    #If pars are one value, make an array of len(Npsr) with the value
+    #If pars are multiple values, assign them to arrays in updated pars
+    # and check if they have defined sky coordinates.
     pars = [par * np.ones(Npsrs) if not hl else par
             for par, hl in zip(pars[:stop], haslen[:stop])]
     if all(haslen[stop:]):
@@ -117,15 +104,18 @@ def sim_pta(timespan, cad, sigma, phi, theta, Npsrs=None,
 
         N = np.diag(toaerrs**2)
         if 'A_rn' in keys:
-            plaw = red_noise_powerlaw(A=pars['A_rn'][ii],
-                                      alpha=pars['alpha_rn'][ii],
-                                      freqs=freqs)
-            N += corr_from_psd(freqs=freqs, psd=plaw, toas=toas)
-        if 'A_gwb' in keys:
-            plaw = red_noise_powerlaw(A=pars['A_gwb'][ii],
-                                      alpha=pars['alpha_gwb'][ii],
-                                      freqs=freqs)
-            N += corr_from_psd(freqs=freqs, psd=plaw, toas=toas)
+            if isinstance(pars['A_rn'][ii],float):
+                plaw = red_noise_powerlaw(A=pars['A_rn'][ii],
+                                          alpha=pars['alpha'][ii],
+                                          freqs=freqs)
+                N += corr_from_psd(freqs=freqs, psd=plaw, toas=toas)
+            else:
+                rn_dim = len(pars['A_rn'][ii])
+                for jj in range(rn_dim):
+                    plaw = red_noise_powerlaw(A=pars['A_rn'][ii][jj],
+                                              alpha=pars['alpha'][ii][jj],
+                                              freqs=freqs)
+                    N += corr_from_psd(freqs=freqs, psd=plaw, toas=toas)
         M = create_design_matrix(toas, RADEC=True, PROPER=True, PX=True)
         p = Pulsar(toas, toaerrs, phi=pars['phi'][ii],
                    theta=pars['theta'][ii], N=N)
