@@ -564,16 +564,17 @@ class GWBSensitivityCurve(SensitivityCurve):
     r"""
     Class to produce a sensitivity curve for a gravitational wave
     background, using Hellings-Downs spatial correlations.
-    """
-    def __init__(self, spectra, orf='hd'):
-        """
-        Parameters
-        ----------
 
-        orf : str, optional, ['hd','st','dipole','monopole']
-            Overlap reduction function to be used in the sensitivity curve.
-            Maybe be Hellings-Downs, Scalar-Tensor, Dipole or Monopole.
-        """
+    Parameters
+    ----------
+    orf : str, optional {'hd', 'st', 'dipole', 'monopole'}
+        Overlap reduction function to be used in the sensitivity curve.
+        Maybe be Hellings-Downs, Scalar-Tensor, Dipole or Monopole.
+
+    """
+
+    def __init__(self, spectra, orf='hd'):
+
         super().__init__(spectra)
         if orf == 'hd':
             Coff = HellingsDownsCoeff(self.phis, self.thetas)
@@ -627,9 +628,23 @@ class GWBSensitivityCurve(SensitivityCurve):
 
 
 class DeterSensitivityCurve(SensitivityCurve):
-    def __init__(self, spectra, include_corr=False, A_GWB=None):
+    '''
+    Parameters
+    ----------
+
+    include_corr : bool
+        Whether to include cross correlations from the GWB as an additional
+        noise source in full PTA correlation matrix.
+        (Has little to no effect and adds a lot of computation time.)
+
+    A_GWB : float
+        Value of GWB amplitude for use in cross correlations.
+    '''
+    def __init__(self, spectra, pulsar_term=True,
+                 include_corr=False, A_GWB=None):
         super().__init__(spectra)
         self.T_I = np.array([sp.toas.max()-sp.toas.min() for sp in spectra])
+        self.pulsar_term = pulsar_term
         self.include_corr = include_corr
         if include_corr:
             self.spectra = spectra
@@ -661,8 +676,9 @@ class DeterSensitivityCurve(SensitivityCurve):
                 summand = num[:,np.newaxis] * self.NcalInvIJ
                 summand *= resid_response(self.freqs)[np.newaxis,:]
                 sum2 = np.sum(summand, axis=0)
-            self._S_eff = np.power((4./5.) * sum1,-1)
-        return self._S_eff#sum1,sum2
+            norm = 4./5 if self.pulsar_term else 2./5
+            self._S_eff = np.power(norm * sum1,-1)
+        return self._S_eff
 
     @property
     def NcalInvIJ(self):
@@ -909,6 +925,53 @@ def DipoleCoeff(phi, theta, norm='std'):
     # calculate rss (root-sum-squared) of Hellings-Downs factor
     chiRSS = np.sqrt(np.sum(chiIJ**2))
     return np.arccos(cosThetaIJ), chiIJ, np.array([first,second]), chiRSS
+
+def MonopoleCoeff(phi, theta, norm='std'):
+    """
+    Calculate Monopole overlap reduction coefficients from two lists of sky
+    positions.
+
+    Parameters
+    ----------
+
+    phi : array, list
+        Pulsar axial coordinate.
+
+    theta : array, list
+        Pulsar azimuthal coordinate.
+
+    Returns
+    -------
+
+    ThetaIJ : array
+        An Npair-long array of angles between pairs of pulsars.
+
+    chiIJ : array
+        An Npair-long array of Dipole ORF coefficients.
+
+    pairs : array
+        A 2xNpair array of pair indices corresponding to input order of sky
+        coordinates.
+
+    chiRSS : float
+        Root-sum-squared value of all Dipole ORF coefficients.
+
+    """
+
+    Npsrs = len(phi)
+    # Npairs = np.int(Npsrs * (Npsrs-1) / 2.)
+    psr_idx = np.arange(Npsrs)
+    pairs = list(it.combinations(psr_idx,2))
+    first, second = list(map(list, zip(*pairs)))
+    cosThetaIJ = np.cos(theta[first]) * np.cos(theta[second]) \
+                    + np.sin(theta[first]) * np.sin(theta[second]) \
+                    * np.cos(phi[first] - phi[second])
+    chiIJ = np.ones_like(cosThetaIJ)
+
+    # calculate rss (root-sum-squared) of Hellings-Downs factor
+    chiRSS = np.sqrt(np.sum(chiIJ**2))
+    return np.arccos(cosThetaIJ), chiIJ, np.array([first,second]), chiRSS
+
 
 def get_Tspan(psrs):
     """

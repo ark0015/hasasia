@@ -19,14 +19,37 @@ class SkySensitivity(DeterSensitivityCurve):
     r'''
     Class to make sky maps for deterministic PTA gravitational wave signals.
     Calculated in terms of :math:`\hat{n}=-\hat{k}`.
+
+    Parameters
+    ----------
+    theta_gw : list, array
+        Gravitational wave source sky location colatitude at which to
+        calculate sky map.
+
+    phi_gw : list, array
+        Gravitational wave source sky location longitude at which to
+        calculate sky map.
+
+    pulsar_term : bool, str, optional [True, False, 'explicit']
+        Flag for including the pulsar term in sky map sensitivity. True
+        includes an idealized factor of two from Equation (36) of `[1]`_.
+        The `'explicit'` flag turns on an explicit calculation of
+        pulsar terms using pulsar distances. (This option takes
+        considerably more computational resources.)
+
+        .. _[1]: https://arxiv.org/abs/1907.04341
+
+    pol: str, optional ['gr','scalar-trans','scalar-long','vector-long']
+        Polarization of gravitational waves to be used in pulsar antenna
+        patterns. Only one can be used at a time.
     '''
-    def __init__(self, spectra, theta_gw, phi_gw, pulsar_term=False, pol='gr'):
+    def __init__(self, spectra, theta_gw, phi_gw, pulsar_term=True, pol='gr'):
         super().__init__(spectra)
         self.pulsar_term = pulsar_term
         self.theta_gw = theta_gw
         self.phi_gw = phi_gw
         self.pos = - khat(self.thetas, self.phis)
-        if pulsar_term:
+        if pulsar_term == 'explicit':
             self.pdists = np.array([(sp.pdist/c.c).to('s').value
                                     for sp in spectra]) #pulsar distances
 
@@ -53,7 +76,7 @@ class SkySensitivity(DeterSensitivityCurve):
         denom = 1 + np.einsum('ij, il->jl', self.pos, self.K)
 
         self.D = num[:,:,:,np.newaxis]/denom[np.newaxis, np.newaxis,:,:]
-        if pulsar_term:
+        if pulsar_term == 'explicit':
             Dp = self.pdists[:,np.newaxis] * denom
             Dp = self.freqs[:,np.newaxis,np.newaxis] * Dp[np.newaxis,:,:]
             pt = 1-np.exp(-1j*2*np.pi*Dp)
@@ -75,20 +98,12 @@ class SkySensitivity(DeterSensitivityCurve):
             self.Ry = np.einsum('ijkl, ijl ->kl',self.D, self.e_y)
             self.sky_response = self.Rx**2 + self.Ry**2
 
-        if pulsar_term:
+        if pulsar_term == 'explicit':
             self.sky_response = (0.5 * self.sky_response[np.newaxis,:,:]
                                  * self.pt_sqr)
 
-    # def SNR(self, h):
-    #     '''
-    #
-    #     '''
-    #     # integrand = 4.0 * h[:,np.newaxis]**2 / self.S_effSky
-    #     integrand = h[:,np.newaxis]**2 / self.S_effSky
-    #     return np.sqrt(np.trapz(y=integrand, x=self.freqs, axis=0))
-
     def SNR(self, h0):
-        '''
+        r'''
         Calculate the signal-to-noise ratio of a source given the strain
         amplitude. This is based on Equation (79) from Hazboun, et al., 2019
         `[1]`_.
@@ -100,6 +115,33 @@ class SkySensitivity(DeterSensitivityCurve):
         '''
 
         return h0 * np.sqrt(self.Tspan / self.S_eff)
+
+    def h_thresh(self, SNR=1):
+        r'''
+        Method to return a skymap of amplitudes needed to see a circular binary,
+        given the specified SNR. This is based on Equation (80) from Hazboun,
+        et al., 2019 `[1]`_.
+
+        .. math::
+            h_0=\rho(\hat{n})\sqrt{\frac{S_{\rm eff}(f_0 ,\hat{k})}{T_{\rm obs}}}
+
+        .. _[1]: https://arxiv.org/abs/1907.04341
+
+
+        Parameters
+        ----------
+
+        SNR : float, optional
+            Desired signal-to-noise ratio.
+
+        Returns
+        -------
+        An array representing the skymap of amplitudes needed to see the
+        given signal with the SNR threshold specified.
+        '''
+
+        return SNR * np.sqrt(self.S_eff / self.Tspan)
+
 
     def A_gwb(self, h_div_A, SNR=1):
         '''
@@ -128,10 +170,12 @@ class SkySensitivity(DeterSensitivityCurve):
     def S_eff(self):
         """Strain power sensitivity. """
         if not hasattr(self, '_S_eff'):
-            if self.pulsar_term:
+            if self.pulsar_term == 'explicit':
                 self._S_eff = 1.0 / (4./5 * np.sum(self.S_SkyI, axis=1))
-            else:
+            elif self.pulsar_term:
                 self._S_eff = 1.0 / (12./5 * np.sum(self.S_SkyI, axis=1))
+            else:
+                self._S_eff = 1.0 / (6./5 * np.sum(self.S_SkyI, axis=1))
         return self._S_eff
 
     @property
@@ -140,7 +184,7 @@ class SkySensitivity(DeterSensitivityCurve):
         if not hasattr(self, '_S_SkyI'):
             t_I = self.T_I / self.Tspan
             RNcalInv = t_I[:,np.newaxis] / self.SnI
-            if self.pulsar_term:
+            if self.pulsar_term == 'explicit':
                 RNcalInv /= resid_response(self.freqs)
                 self._S_SkyI = RNcalInv.T[:,:,np.newaxis] * self.sky_response
             else:
